@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch.utils import data
 import torch.backends.cudnn as cudnn
 from utils.data_utils import *
+from utils.eval_utils import eval_regdb, eval_sysu
 from utils.loss import OriTripletLoss
 from utils.misc import AverageMeter,Logger, set_seed
 from model import network
@@ -198,6 +199,7 @@ def train(epoch):
 
         train_loss_meter.update(loss.item(), 2* img_v.size(0))
         loss_id_meter.update(loss_id.item(), 2 * img_v.size(0))
+        loss_tri_meter.update((loss_tri.item()+loss_tri_recon.item())/2, 2*img_v.size(0))
         # if args.method == 'full':
         #     loss_ic_meter.update(loss_ic.item(), 2 * img_v.size(0))
         #     loss_dt_meter.update(loss_dt.item(), 2 * img_v.size(0))
@@ -214,15 +216,13 @@ def train(epoch):
                       'lr: {:.3f} '
                       'loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                       'loss_id: {loss_id.val:.4f} ({loss_id.avg:.4f}) '
-                      'loss_tri: {loss_ic.val:.4f} ({loss_ic.avg:.4f}) '
-                      'loss_dt: {loss_dt.val:.4f} ({loss_dt.avg:.4f}) '
+                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '
                       'acc: {acc:.2f}'.format(
                     epoch, batch_idx, len(trainloader),
                     current_lr,
                     train_loss=train_loss_meter,
                     loss_id=loss_id_meter,
-                    loss_ic=loss_ic_meter,
-                    loss_dt=loss_dt_meter,
+                    loss_tri=loss_tri_meter,
                     acc=100. * correct / total)
                 )
             else:
@@ -242,9 +242,62 @@ def train(epoch):
         writer.add_scalar('total_loss', train_loss_meter.avg, epoch)
         writer.add_scalar('id_loss', loss_id_meter.avg, epoch)
         writer.add_scalar('lr', current_lr, epoch)
-        if args.method == 'full':
-            writer.add_scalar('ic_loss', loss_ic_meter.avg, epoch)
-            writer.add_scalar('dt_loss', loss_dt_meter.avg, epoch)
+        # if args.method == 'full':
+        writer.add_scalar('ic_loss', loss_tri_meter.avg, epoch)
+        writer.add_scalar('train_acc', 100. * correct / total, epoch)
+        # writer.add_scalar('dt_loss', loss_dt_meter.avg, epoch)
+
+def evaluation(epoch):
+    net.eval()
+    print('Extracting Gallery Feature...')
+    start = time.time()
+    ptr = 0
+    gall_feat = np.zeros((ngall, 2048))
+    with torch.no_grad():
+        for batch_idx, data in enumerate(gall_loader):
+            input = data['img']
+            batch_num = input.size(0)
+            input = Variable(input.cuda())
+            feat = net(input, input, test_mode[0])['recon_p']
+            gall_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
+            ptr = ptr + batch_num
+        print('Extracting Time:\t {:.3f}'.format(time.time() - start))
+
+        # switch to evaluation
+        net.eval()
+        print('Extracting Query Feature...')
+        start = time.time()
+        ptr = 0
+        query_feat = np.zeros((nquery, 2048))
+        with torch.no_grad():
+            for batch_idx, data in enumerate(query_loader):
+                input = data['img']
+                batch_num = input.size(0)
+                input = Variable(input.cuda())
+                feat = net(input, input, test_mode[0])['recon_p']
+                query_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
+                ptr = ptr + batch_num
+        print('Extracting Time:\t {:.3f}'.format(time.time() - start))
+
+        start = time.time()
+        # compute the similarity
+        distmat = np.matmul(query_feat, np.transpose(gall_feat))
+
+        # evaluation
+        if dataset == 'regdb':
+            cmc, mAP, mINP = eval_regdb(-distmat, query_label, gall_label)
+        elif dataset == 'sysu':
+            cmc, mAP, mINP = eval_sysu(-distmat, query_label, gall_label, query_cam, gall_cam)
+
+        print('Evaluation Time:\t {:.3f}'.format(time.time() - start))
+
+        if args.enable_tb:
+            writer.add_scalar('rank1', cmc[0], epoch)
+            writer.add_scalar('mAP', mAP, epoch)
+            writer.add_scalar('mINP', mINP, epoch)
+
+        return cmc, mAP, mINP
+
 # training
 print('==> Start Training...')
 for epoch in range(start_epoch, 81 - start_epoch):
@@ -265,34 +318,34 @@ for epoch in range(start_epoch, 81 - start_epoch):
     # training
     train(epoch)
 
-    # if epoch > 0 and epoch % args.test_every == 0:
-    #     print('Test Epoch: {}'.format(epoch))
-    #
-    #     # testing
-    #     cmc, mAP, mINP = test(epoch)
-    #     # save model
-    #     if cmc[0] > best_acc:  # not the real best for sysu-mm01
-    #         best_acc = cmc[0]
-    #         best_epoch = epoch
-    #         state = {
-    #             'net': net.state_dict(),
-    #             'cmc': cmc,
-    #             'mAP': mAP,
-    #             'mINP': mINP,
-    #             'epoch': epoch,
-    #         }
-    #         torch.save(state, osp.join(checkpoint_path,'best.t'))
-    #
-    #     # save model
-    #     if epoch > 10 and epoch % args.save_epoch == 0:
-    #         state = {
-    #             'net': net.state_dict(),
-    #             'cmc': cmc,
-    #             'mAP': mAP,
-    #             'epoch': epoch,
-    #         }
-    #         torch.save(state, osp.join(checkpoint_path, 'ep_{:02d}.t'.format(epoch)))
-    #
-    #     print('POOL:   Rank-1: {:.2%} | Rank-5: {:.2%} | Rank-10: {:.2%}| Rank-20: {:.2%}| mAP: {:.2%}| mINP: {:.2%}'.format(
-    #         cmc[0], cmc[4], cmc[9], cmc[19], mAP, mINP))
-    #     print('Best Epoch [{}]'.format(best_epoch))
+    if epoch > 0 and epoch % args.test_every == 0:
+        print('Test Epoch: {}'.format(epoch))
+
+        # testing
+        cmc, mAP, mINP = evaluation(epoch)
+        # save model
+        if cmc[0] > best_acc:  # not the real best for sysu-mm01
+            best_acc = cmc[0]
+            best_epoch = epoch
+            state = {
+                'net': net.state_dict(),
+                'cmc': cmc,
+                'mAP': mAP,
+                'mINP': mINP,
+                'epoch': epoch,
+            }
+            torch.save(state, osp.join(checkpoint_path,'best.t'))
+
+        # save model
+        if epoch > 5 and epoch % args.save_epoch == 0:
+            state = {
+                'net': net.state_dict(),
+                'cmc': cmc,
+                'mAP': mAP,
+                'epoch': epoch,
+            }
+            torch.save(state, osp.join(checkpoint_path, 'ep_{:02d}.t'.format(epoch)))
+
+        print('POOL:   Rank-1: {:.2%} | Rank-5: {:.2%} | Rank-10: {:.2%}| Rank-20: {:.2%}| mAP: {:.2%}| mINP: {:.2%}'.format(
+            cmc[0], cmc[4], cmc[9], cmc[19], mAP, mINP))
+        print('Best Epoch [{}]'.format(best_epoch))
