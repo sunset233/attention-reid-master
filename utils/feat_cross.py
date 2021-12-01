@@ -14,8 +14,10 @@ class feat_cross(nn.Module):
 
 
     def xcorr_depthwise(self, x, kernel):
-        """depthwise cross correlation
+        """depthwise cross correlation 从这个地方进行改进
         """
+        channel = kernel.size(0)
+
         batch = kernel.size(0)
         channel = kernel.size(1)
         x = torch.mul(x, kernel)
@@ -29,7 +31,7 @@ class feat_cross(nn.Module):
 
     def forward(self, f1, f2):
 
-        features = f1 * f2
+        features = torch.mul(f1, f2)
         batch_size, c, h, w = features.size(0), features.size(1), features.size(2), features.size(3)
         features -= features.min(dim=-1, keepdim=True)[0]
         features /= features.max(dim=-1, keepdim=True)[0] + 1e-12
