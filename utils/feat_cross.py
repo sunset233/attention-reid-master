@@ -11,12 +11,11 @@ import torch.nn.functional as F
 class feat_cross(nn.Module):
     def __init__(self):
         self.in_channels = 2048
-        out_channels = 1024
         stride = 3
         super(feat_cross, self).__init__()
         self.downsample = nn.Sequential(
-            nn.Conv2d(self.in_channels, out_channels, kernel_size=3, stride=stride),
-            nn.BatchNorm2d(out_channels))
+            nn.Conv2d(self.in_channels, self.in_channels/2, kernel_size=3, stride=stride),
+            nn.BatchNorm2d(self.in_channels/2))
 
     def xcorr_depthwise(self, x, kernel):
         """depthwise cross correlation
@@ -38,7 +37,7 @@ class feat_cross(nn.Module):
 
     '''
     @Description:
-        Cross-attention is modified by depth-wise correlation map to extract correlation map
+        Cross-attention is modified by depth-wise correlation matrix to extract correlation map
     '''
 
     def forward(self, f1, f2):
