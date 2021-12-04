@@ -2,7 +2,7 @@ import argparse
 import os
 parser = argparse.ArgumentParser(description='Attention Model')
 
-parser.add_argument('--dataset', default='sysu', help='dataset name: [regdb or sysu]')
+parser.add_argument('--dataset', default='regdb', help='dataset name: [regdb or sysu]')
 parser.add_argument('--workers', default=4, type=int, help='number of data loading workers (default: 4)')
 parser.add_argument('--img_h', default=288, type=int, help='img height')
 parser.add_argument('--img_w', default=144, type=int, help='img width')

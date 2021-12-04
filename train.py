@@ -197,7 +197,7 @@ def train(epoch):
         loss.backward()
         optimizer.step()
 
-        train_loss_meter.update(loss.item(), 2* img_v.size(0))
+        train_loss_meter.update(loss.item(), 2 * img_v.size(0))
         loss_id_meter.update(loss_id.item(), 2 * img_v.size(0))
         loss_tri_meter.update((loss_tri.item()+loss_tri_recon.item())/2, 2*img_v.size(0))
         # if args.method == 'full':
@@ -216,14 +216,12 @@ def train(epoch):
                       'lr: {:.3f} '
                       'loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                       'loss_id: {loss_id.val:.4f} ({loss_id.avg:.4f}) '
-                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '
-                      'acc: {acc:.2f}'.format(
+                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '.format(
                     epoch, batch_idx, len(trainloader),
                     current_lr,
                     train_loss=train_loss_meter,
                     loss_id=loss_id_meter,
-                    loss_tri=loss_tri_meter,
-                    acc=100. * correct / total)
+                    loss_tri=loss_tri_meter)
                 )
             else:
                 print('Epoch: [{}][{}/{}] '
