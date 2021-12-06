@@ -69,49 +69,58 @@ class ConvBlock(nn.Module):
         self.bn = nn.BatchNorm2d(out_c)
 
     def forward(self, x):
-        return self.bn(self.conv(x))
+       return self.bn(self.conv(x))
+
 class feat_cross(nn.Module):
     def __init__(self):
         super(feat_cross, self).__init__()
-        self.in_c = 32
-        self.conv1 = ConvBlock(in_c=32, out_c=8, k=1)
-        self.conv2 = nn.Conv2d(in_channels=8, out_channels=32, kernel_size=1)
+        self.in_b = 32
+        self.conv1 = ConvBlock(in_c=self.in_b, out_c=self.in_b//2, k=1)
+        self.conv2 = nn.Conv2d(in_channels=self.in_b//2, out_channels=self.in_b, kernel_size=1)
+        self.in_c = 6
+        self.conv3 = ConvBlock(in_c=self.in_c, out_c = self.in_c//2, k=1)
+        self.conv4 = nn.Conv2d(in_channels=self.in_c//2, out_channels=self.in_c, kernel_size=1)
 
     def get_attention(self, a):
         input_a = a
         a = a.unsqueeze(0)
-        a = F.relu(self.conv1(a))
-        a = self.conv2(a)
+        if a.size(1)==32:
+            a = F.relu(self.conv1(a))
+            a = self.conv2(a)
+        elif a.size(1)==6:
+            a = F.relu(self.conv3(a))
+            a = self.conv4(a)
         a = a.squeeze(0)
         a = torch.mean(input_a*a, -1)
         a = F.softmax(a/0.05, dim=-1) + 1
         return a
-
+    # f1, f2 [6, 2048, 18, 9]
     def forward(self, f1, f2):
-        b, c, h, w = f1.size()
-        f1 = f1.view(b, c, -1) # [b, c, -1]
-        f2 = f2.view(b, c, -1) # [b, c, -1]
-        f1_norm = F.normalize(f1, p=1, dim=2, eps=1e-12)
-        f2_norm = F.normalize(f2, p=1, dim=2, eps=1e-12)
+        b1, c1, h1, w1 = f1.size()
+        b2, c2, h2, w2 = f2.size()
+        f1 = f1.view(b1, c1, -1) # [32, 2048, 162]
+        f2 = f2.view(b2, c2, -1) # [32, 2048, 162]
+        f1_norm = F.normalize(f1, p=2, dim=1, eps=1e-12)
+        f2_norm = F.normalize(f2, p=2, dim=1, eps=1e-12)
 
-        f1_norm = f1_norm.transpose(1, 2) # [b, -1, c]
-        f2_norm = f2_norm # [b, c, -1]
+        f1_norm = f1_norm.transpose(1, 2) # [32, 162, 2048] #[22, 2048, 162]
+        f2_norm = f2_norm # [32, 2048, 162] # [23, 2048, 162]
 
-        a1 = torch.matmul(f1_norm, f2_norm) # [b, -1, -1]
+        a1 = torch.matmul(f1_norm, f2_norm) # [32, 162] # [22, 2048, 162] * [23, 2048, 162]  problem occoured
         a2 = a1.transpose(1, 2)
 
-        a1 = self.get_attention(a1) # [b, -1]
-        a2 = self.get_attention(a2) # [b, -1]
-        f1 = f1.unsqueeze(1) * a1.unsqueeze(2)
-        f1 = f1.view(b, c, h, w)
-        f2 = f2.unsqueeze(1) * a2.unsqueeze(2)
-        f2 = f2.view(b, c, h, w)
-        return f1.transpose(1, 2), f2.transpose(1, 2)
+        a1 = self.get_attention(a1) # [32, 162]
+        a2 = self.get_attention(a2) # [32, 162]
+        f1 = f1 * a1.unsqueeze(1)
+        f1 = f1.view(b1, c1, h1, w1)
+        f2 = f2 * a2.unsqueeze(1)
+        f2 = f2.view(b2, c2, h2, w2)
+        return f1, f2
 
 
 
-a = torch.randn(32, 2048, 18, 9)
-b = torch.randn(32, 2048, 18, 9)
+a = torch.randn(6, 2048, 18, 9)
+b = torch.randn(6, 2048, 18, 9)
 cross = feat_cross()
 c, d = cross(a, b)
 

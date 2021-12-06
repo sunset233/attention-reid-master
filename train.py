@@ -256,45 +256,45 @@ def evaluation(epoch):
             input = data['img']
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])['recon_p']
+            feat = net(input, input, test_mode[0])['x_p']
             gall_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
         print('Extracting Time:\t {:.3f}'.format(time.time() - start))
 
-        # switch to evaluation
-        net.eval()
-        print('Extracting Query Feature...')
-        start = time.time()
-        ptr = 0
-        query_feat = np.zeros((nquery, 2048))
-        with torch.no_grad():
-            for batch_idx, data in enumerate(query_loader):
-                input = data['img']
-                batch_num = input.size(0)
-                input = Variable(input.cuda())
-                feat = net(input, input, test_mode[0])['recon_p']
-                query_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
-                ptr = ptr + batch_num
-        print('Extracting Time:\t {:.3f}'.format(time.time() - start))
+    # switch to evaluation
+    net.eval()
+    print('Extracting Query Feature...')
+    start = time.time()
+    ptr = 0
+    query_feat = np.zeros((nquery, 2048))
+    with torch.no_grad():
+        for batch_idx, data in enumerate(query_loader):
+            input = data['img']
+            batch_num = input.size(0)
+            input = Variable(input.cuda())
+            feat = net(input, input, test_mode[0])['x_p']
+            query_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
+            ptr = ptr + batch_num
+    print('Extracting Time:\t {:.3f}'.format(time.time() - start))
 
-        start = time.time()
-        # compute the similarity
-        distmat = np.matmul(query_feat, np.transpose(gall_feat))
+    start = time.time()
+    # compute the similarity
+    distmat = np.matmul(query_feat, np.transpose(gall_feat))
 
-        # evaluation
-        if dataset == 'regdb':
-            cmc, mAP, mINP = eval_regdb(-distmat, query_label, gall_label)
-        elif dataset == 'sysu':
-            cmc, mAP, mINP = eval_sysu(-distmat, query_label, gall_label, query_cam, gall_cam)
+    # evaluation
+    if dataset == 'regdb':
+        cmc, mAP, mINP = eval_regdb(-distmat, query_label, gall_label)
+    elif dataset == 'sysu':
+        cmc, mAP, mINP = eval_sysu(-distmat, query_label, gall_label, query_cam, gall_cam)
 
-        print('Evaluation Time:\t {:.3f}'.format(time.time() - start))
+    print('Evaluation Time:\t {:.3f}'.format(time.time() - start))
 
-        if args.enable_tb:
-            writer.add_scalar('rank1', cmc[0], epoch)
-            writer.add_scalar('mAP', mAP, epoch)
-            writer.add_scalar('mINP', mINP, epoch)
+    if args.enable_tb:
+        writer.add_scalar('rank1', cmc[0], epoch)
+        writer.add_scalar('mAP', mAP, epoch)
+        writer.add_scalar('mINP', mINP, epoch)
 
-        return cmc, mAP, mINP
+    return cmc, mAP, mINP
 
 # training
 print('==> Start Training...')
