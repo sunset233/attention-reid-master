@@ -256,7 +256,7 @@ def evaluation(epoch):
             input = data['img']
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])['x_p']
+            feat = net(input, input, test_mode[0])['recon_p']
             gall_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
         print('Extracting Time:\t {:.3f}'.format(time.time() - start))
@@ -272,7 +272,7 @@ def evaluation(epoch):
             input = data['img']
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])['x_p']
+            feat = net(input, input, test_mode[0])['recon_p']
             query_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time() - start))

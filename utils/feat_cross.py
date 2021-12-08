@@ -80,6 +80,8 @@ class feat_cross(nn.Module):
         self.in_c = 6
         self.conv3 = ConvBlock(in_c=self.in_c, out_c = self.in_c//2, k=1)
         self.conv4 = nn.Conv2d(in_channels=self.in_c//2, out_channels=self.in_c, kernel_size=1)
+        self.conv5 = nn.Conv2d(in_channels=23, out_channels=22, kernel_size=1)
+        self.conv6 = nn.Conv2d(in_channels=22, out_channels=23, kernel_size=1)
 
     def get_attention(self, a):
         input_a = a
@@ -105,24 +107,33 @@ class feat_cross(nn.Module):
 
         f1_norm = f1_norm.transpose(1, 2) # [32, 162, 2048] #[22, 2048, 162]
         f2_norm = f2_norm # [32, 2048, 162] # [23, 2048, 162]
-
-        a1 = torch.matmul(f1_norm, f2_norm) # [32, 162] # [22, 2048, 162] * [23, 2048, 162]  problem occoured
-        a2 = a1.transpose(1, 2)
+        if f1_norm.size(0) != f2_norm.size(0):
+            f2_norm = f2_norm.unsqueeze(0)
+            f2_norm = self.conv5(f2_norm)
+            f2_norm = f2_norm.squeeze(0)
+        a1 = torch.matmul(f1_norm, f2_norm)# [32, 162] # [22, 2048, 162] * [23, 2048, 162]  problem occoured
+        if a1.size(0) == 22:
+            a2 = a1.unsqueeze(0)
+            a2 = self.conv6(a2)
+            a2 = a2.squeeze(0)
+            a2 = a2.transpose(1, 2)
+        else:
+            a2 = a1.transpose(1, 2)
 
         a1 = self.get_attention(a1) # [32, 162]
         a2 = self.get_attention(a2) # [32, 162]
         f1 = f1 * a1.unsqueeze(1)
-        f1 = f1.view(b1, c1, h1, w1)
-        f2 = f2 * a2.unsqueeze(1)
-        f2 = f2.view(b2, c2, h2, w2)
-        return f1, f2
+        a1 = a1.unsqueeze(1).view(b1, -1, h1, w1)
+        a2 = a2.unsqueeze(1).view(b2, -1, h2, w2)
+        return a1, a2
 
 
 
-a = torch.randn(6, 2048, 18, 9)
-b = torch.randn(6, 2048, 18, 9)
+a = torch.randn(22, 2048, 18, 9)
+b = torch.randn(23, 2048, 18, 9)
 cross = feat_cross()
 c, d = cross(a, b)
+print(c.shape, d)
 
 
 

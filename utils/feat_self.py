@@ -48,3 +48,9 @@ class feat_self(nn.Module):
         W_y = self.W(y)
         z = W_y + x
         return z
+
+a = torch.randn(32, 2048, 18, 9)
+self = feat_self()
+a = self(a)
+print(a)
+print(a.shape)

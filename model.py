@@ -109,17 +109,17 @@ class network(nn.Module):
 
         # 这里的x应该是包含了还几张图片的可见光和红外光特征 batch_size * channel * height * width，需要做的就是将两个模态的特征分开，然后进行注意力特征提取
         x = self.base_resnet(x)
+        x_p = self.pool(x)
         batch_size, fdim, h, w = x.shape
         xv = x[:batch_size//2]
         xt = x[batch_size//2:]
-        x_p = self.pool(x)
         xv_s = self.self_attention(xv)
         xt_s = self.self_attention(xt)
         xv_c, xt_c = self.cross_attention(xv, xt)
 
         # consider how to fusion the feature can get better performance
-        xv_recon = xv_s + 2 * xt_c
-        xt_recon = xt_s + 2 * xv_c
+        xv_recon = xv_s + 2 * xv_c
+        xt_recon = xt_s + 2 * xt_c
         feat_recon = torch.cat([xv_recon, xt_recon], dim=0)
         recon_p = self.pool(feat_recon) # lack of pooling operation
         clsid_recon = self.classifier(self.bottleneck(recon_p)) # return it

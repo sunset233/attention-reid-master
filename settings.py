@@ -13,7 +13,7 @@ parser.add_argument('--test-batch', default=64, type=int, help='testing batch si
 parser.add_argument('--save_path', default='log/', type=str, help='parent save directory')
 parser.add_argument('--exp_name', default='exp', type=str, help='child save directory')
 ### model/training config
-parser.add_argument('--lr', default=0.01 , type=float, help='learning rate, 0.00035 for adam')
+parser.add_argument('--lr', default=0.01, type=float, help='learning rate, 0.00035 for adam')
 parser.add_argument('--optim', default='sgd', type=str, help='optimizer')
 parser.add_argument('--save_epoch', default=5, type=int, help='save epochs') # 40
 parser.add_argument('--test_every', default=5, type=int, help='test epochs') # 40
