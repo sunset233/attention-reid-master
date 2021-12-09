@@ -119,13 +119,21 @@ class feat_cross(nn.Module):
             a2 = a2.transpose(1, 2)
         else:
             a2 = a1.transpose(1, 2)
-
-        a1 = self.get_attention(a1) # [32, 162]
-        a2 = self.get_attention(a2) # [32, 162]
         f1 = f1 * a1.unsqueeze(1)
-        a1 = a1.unsqueeze(1).view(b1, -1, h1, w1)
-        a2 = a2.unsqueeze(1).view(b2, -1, h2, w2)
-        return a1, a2
+        f1 = f1.view(b1, c1, h1, w1)
+        f2 = f2 * a2.unsqueeze(1)
+        f2 = f2.view(b2, c2, h2, w2)
+        return f1, f2
+        # f1 = f1.unsqueeze(1) * a1.unsqueeze(1)
+        # f1 = f1.view(b1, c1, h1, w1)
+        # f2 = f2.unsqueeze(1) * a2.unsqueeze(1)
+        # f2 = f2.view(b2, c2, h2, w2)
+        # a1 = self.get_attention(a1) # [32, 162]
+        # a2 = self.get_attention(a2) # [32, 162]
+        # f1 = f1 * a1.unsqueeze(1)
+        # a1 = a1.unsqueeze(1).view(b1, -1, h1, w1)
+        # a2 = a2.unsqueeze(1).view(b2, -1, h2, w2)
+        # return a1, a2
 
 
 

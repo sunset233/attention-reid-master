@@ -6,7 +6,7 @@ from torch.utils import data
 import torch.backends.cudnn as cudnn
 from utils.data_utils import *
 from utils.eval_utils import eval_regdb, eval_sysu
-from utils.loss import OriTripletLoss
+from utils.loss import OriTripletLoss, ContrastiveLoss
 from utils.misc import AverageMeter,Logger, set_seed
 from model import network
 from settings import parser
@@ -120,9 +120,11 @@ cudnn.benchmark = True
 
 crtierion_id = nn.CrossEntropyLoss()
 critierion_tri = OriTripletLoss(batch_size=args.batch_size * args.num_pos, margin=args.margin)
+critierion_con = ContrastiveLoss(batch_size=args.batch_size * args.num_pos, temperature=args.temperature)
 
 crtierion_id.to(device)
 critierion_tri.to(device)
+critierion_con.to(device)
 
 ignored_params = list(map(id, net.bottleneck.parameters())) \
     + list(map(id, net.classifier.parameters()))
@@ -154,6 +156,9 @@ def train(epoch):
     train_loss_meter = AverageMeter()
     loss_id_meter = AverageMeter()
     loss_tri_meter = AverageMeter()
+    if args.method == 'full':
+        loss_con_meter = AverageMeter()
+
 
     data_time = AverageMeter()
     batch_time = AverageMeter()
@@ -180,15 +185,17 @@ def train(epoch):
         out = net(img_v, img_t)
 
         cls_id = out['cls_id']
-        recon_p = out['recon_p']
+        feat_p = out['feat_p']
         x_p = out['x_p']
-        loss_tri, batch_acc = critierion_tri(x_p, labels)
-        loss_tri_recon, batch_acc_recon = critierion_tri(recon_p, labels)
+        loss_tri, batch_acc = critierion_tri(feat_p, labels)
         loss_id = crtierion_id(cls_id, labels)
-        loss = loss_id + loss_tri + loss_tri_recon
+        loss_con = critierion_con(x_p, feat_p)
 
-
-        correct += ((batch_acc / 2) + (batch_acc_recon / 2)) / 2
+        if args.method == 'full':
+            loss = loss_id + loss_tri + loss_con
+        else:
+            loss = loss_id
+        correct += (batch_acc / 2)
         _, predicted = out['cls_id'].max(1)
         correct += (predicted.eq(labels).sum().item() / 2)
         total += labels.size(0)
@@ -199,10 +206,9 @@ def train(epoch):
 
         train_loss_meter.update(loss.item(), 2 * img_v.size(0))
         loss_id_meter.update(loss_id.item(), 2 * img_v.size(0))
-        loss_tri_meter.update((loss_tri.item()+loss_tri_recon.item())/2, 2*img_v.size(0))
-        # if args.method == 'full':
-        #     loss_ic_meter.update(loss_ic.item(), 2 * img_v.size(0))
-        #     loss_dt_meter.update(loss_dt.item(), 2 * img_v.size(0))
+        loss_tri_meter.update(loss_tri.item(), 2 * img_v.size(0))
+        if args.method == 'full':
+            loss_con_meter.update(loss_con.item(), 2 * img_v.size(0))
 
         total += labels.size(0)
         # reid master
@@ -216,12 +222,14 @@ def train(epoch):
                       'lr: {:.3f} '
                       'loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                       'loss_id: {loss_id.val:.4f} ({loss_id.avg:.4f}) '
-                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '.format(
+                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '
+                      'loss_con: {loss_con.val:.4f} ({loss_con.avg:.4f})'  .format(
                     epoch, batch_idx, len(trainloader),
                     current_lr,
                     train_loss=train_loss_meter,
                     loss_id=loss_id_meter,
-                    loss_tri=loss_tri_meter)
+                    loss_tri=loss_tri_meter,
+                    loss_con=loss_con_meter)
                 )
             else:
                 print('Epoch: [{}][{}/{}] '
@@ -240,10 +248,11 @@ def train(epoch):
         writer.add_scalar('total_loss', train_loss_meter.avg, epoch)
         writer.add_scalar('id_loss', loss_id_meter.avg, epoch)
         writer.add_scalar('lr', current_lr, epoch)
-        # if args.method == 'full':
+
         writer.add_scalar('ic_loss', loss_tri_meter.avg, epoch)
         writer.add_scalar('train_acc', 100. * correct / total, epoch)
-        # writer.add_scalar('dt_loss', loss_dt_meter.avg, epoch)
+        if args.method == 'full':
+            writer.add_scalar('contrast_loss', loss_con_meter.avg, epoch)
 
 def evaluation(epoch):
     net.eval()

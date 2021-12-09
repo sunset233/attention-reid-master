@@ -77,6 +77,39 @@ class base_resnet(nn.Module):
         x = self.base.layer4(x)
         return x
 
+class AFF(nn.Module):
+    def __init__(self, channels=64, r=4):
+        super(AFF, self).__init__()
+        inter_channels = int(channels // r)
+
+        self.local_att = nn.Sequential(
+            nn.Conv2d(channels, inter_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(inter_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter_channels, channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(channels),
+        )
+
+        self.global_att = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, inter_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(inter_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(inter_channels, channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(channels),
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, residual):
+        xa = x + residual
+        xl = self.local_att(xa)
+        xg = self.global_att(xa)
+        xlg = xl + xg
+        wei = self.sigmoid(xlg)
+
+        xo = 2 * x * wei + 2 * residual * (1 - wei)
+        return xo
 class network(nn.Module):
     def __init__(self,class_num, args, arch='resnet50'):
         super(network, self).__init__()
@@ -96,6 +129,8 @@ class network(nn.Module):
         self.classifier.apply(weights_init_classifier)
         self.pool = GeMP()
 
+        self.fusion = AFF()
+
 
     def forward(self, x1, x2, mode=0):
         if mode == 0:
@@ -109,21 +144,21 @@ class network(nn.Module):
 
         # 这里的x应该是包含了还几张图片的可见光和红外光特征 batch_size * channel * height * width，需要做的就是将两个模态的特征分开，然后进行注意力特征提取
         x = self.base_resnet(x)
-        x_p = self.pool(x)
         batch_size, fdim, h, w = x.shape
         xv = x[:batch_size//2]
         xt = x[batch_size//2:]
         xv_s = self.self_attention(xv)
         xt_s = self.self_attention(xt)
         xv_c, xt_c = self.cross_attention(xv, xt)
-
-        # consider how to fusion the feature can get better performance
-        xv_recon = xv_s + 2 * xv_c
-        xt_recon = xt_s + 2 * xt_c
-        feat_recon = torch.cat([xv_recon, xt_recon], dim=0)
-        recon_p = self.pool(feat_recon) # lack of pooling operation
-        clsid_recon = self.classifier(self.bottleneck(recon_p)) # return it
-        clsid = self.classifier(self.bottleneck(x_p)) # return it
+        x_s = torch.cat((xv_s, xt_s))
+        x_p = self.pool(x_s) # 经过主干网络
+        self_id = self.classifier(self.bottleneck(x_p)) # 意思是分类后的标签
+        # feature fusion operation
+        xv_f = self.fusion(xv_s + xv_c) + xv_s
+        xt_f = self.fusion(xt_s + xt_c) + xt_s
+        feat = torch.cat((xv_f, xt_f))
+        feat_p = self.pool(feat) # 合成后的
+        # contrast loss aims to measure the distance of two features seems simarility
 
         # loss = id loss + id_con loss + triplet loss
         '''
@@ -133,10 +168,11 @@ class network(nn.Module):
         or we can return other essential parameters 
         '''
         return {
-            'cls_id': clsid,
-            'cls_id_recon': clsid_recon,
-            'x_p': x_p,
-            'recon_p': recon_p
+            'self_id': self_id, # non-local 经过主干网络pooling后的特征 计算id loss
+            'x': x_p, # 经过主干网络pooling后的特征 # 计算triplet loss
+            'feat_p': feat_p, # 融合后pooling后的特征
+            'loss_self': a, #self-attention 需要调整参数
+            'loss_cross': b # cross-attention 需要调整参数
         }
 
 

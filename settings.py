@@ -20,6 +20,7 @@ parser.add_argument('--test_every', default=5, type=int, help='test epochs') # 4
 parser.add_argument('--lw_dt', default=0.5, type=float, help='weight for dense triplet loss')
 parser.add_argument('--margin', default=0.3, type=float, help='triplet loss margin')
 parser.add_argument('--method', default='full', type=str, help='method type: [baseline or full]')
+parser.add_argument('--temperature', default=0, type=int, help='temperature of contrast loss')
 ### evaluation protocols
 parser.add_argument('--trial', default=1, type=int, help='trial (only for RegDB dataset)')
 parser.add_argument('--mode', default='all', type=str, help='all or indoor')
