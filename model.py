@@ -78,7 +78,7 @@ class base_resnet(nn.Module):
         return x
 
 class AFF(nn.Module):
-    def __init__(self, channels=64, r=4):
+    def __init__(self, channels=2048, r=4):
         super(AFF, self).__init__()
         inter_channels = int(channels // r)
 
@@ -152,10 +152,10 @@ class network(nn.Module):
         xv_c, xt_c = self.cross_attention(xv, xt)
         x_s = torch.cat((xv_s, xt_s))
         x_p = self.pool(x_s) # 经过主干网络
-        self_id = self.classifier(self.bottleneck(x_p)) # 意思是分类后的标签
+        cls_id = self.classifier(self.bottleneck(x_p)) # 意思是分类后的标签
         # feature fusion operation
-        xv_f = self.fusion(xv_s + xv_c) + xv_s
-        xt_f = self.fusion(xt_s + xt_c) + xt_s
+        xv_f = self.fusion(xv_s, xv_c) + xv_s
+        xt_f = self.fusion(xt_s, xt_c) + xt_s
         feat = torch.cat((xv_f, xt_f))
         feat_p = self.pool(feat) # 合成后的
         # contrast loss aims to measure the distance of two features seems simarility
@@ -168,11 +168,11 @@ class network(nn.Module):
         or we can return other essential parameters 
         '''
         return {
-            'self_id': self_id, # non-local 经过主干网络pooling后的特征 计算id loss
-            'x': x_p, # 经过主干网络pooling后的特征 # 计算triplet loss
+            'cls_id': cls_id, # non-local 经过主干网络pooling后的特征 计算id loss
+            'x_p': x_p, # 经过主干网络pooling后的特征 # 计算triplet loss
             'feat_p': feat_p, # 融合后pooling后的特征
-            'loss_self': a, #self-attention 需要调整参数
-            'loss_cross': b # cross-attention 需要调整参数
+            # 'loss_self': a, #self-attention 需要调整参数
+            # 'loss_cross': b # cross-attention 需要调整参数
         }
 
 
@@ -181,5 +181,4 @@ if __name__ == '__main__':
     a = torch.randn(8,3,255,255)
     b = torch.randn(8,3,255,255)
     out = net(a, b)
-    print(out.shape)
 

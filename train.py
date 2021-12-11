@@ -155,9 +155,8 @@ def train(epoch):
     current_lr = adjust_learning_rate(optimizer, epoch)
     train_loss_meter = AverageMeter()
     loss_id_meter = AverageMeter()
-    loss_tri_meter = AverageMeter()
-    if args.method == 'full':
-        loss_con_meter = AverageMeter()
+    # if args.method == 'full':
+    #     loss_con_meter = AverageMeter()
 
 
     data_time = AverageMeter()
@@ -184,17 +183,15 @@ def train(epoch):
         data_time.update(time.time() - end)
         out = net(img_v, img_t)
 
-        cls_id = out['cls_id']
-        feat_p = out['feat_p']
         x_p = out['x_p']
-        loss_tri, batch_acc = critierion_tri(feat_p, labels)
-        loss_id = crtierion_id(cls_id, labels)
-        loss_con = critierion_con(x_p, feat_p)
-
-        if args.method == 'full':
-            loss = loss_id + loss_tri + loss_con
-        else:
-            loss = loss_id
+        loss_tri, batch_acc = critierion_tri(out['feat_p'], labels)
+        loss_id = crtierion_id(out['cls_id'], labels) + loss_tri
+        # loss_con = critierion_con(x_p, feat_p)
+        loss = loss_tri
+        # if args.method == 'full':
+        #     loss = loss_id + loss_tri
+        # else:
+        #     loss = loss_id
         correct += (batch_acc / 2)
         _, predicted = out['cls_id'].max(1)
         correct += (predicted.eq(labels).sum().item() / 2)
@@ -206,9 +203,8 @@ def train(epoch):
 
         train_loss_meter.update(loss.item(), 2 * img_v.size(0))
         loss_id_meter.update(loss_id.item(), 2 * img_v.size(0))
-        loss_tri_meter.update(loss_tri.item(), 2 * img_v.size(0))
-        if args.method == 'full':
-            loss_con_meter.update(loss_con.item(), 2 * img_v.size(0))
+        # if args.method == 'full':
+        #     loss_con_meter.update(loss_con.item(), 2 * img_v.size(0))
 
         total += labels.size(0)
         # reid master
@@ -222,14 +218,13 @@ def train(epoch):
                       'lr: {:.3f} '
                       'loss: {train_loss.val:.4f} ({train_loss.avg:.4f}) '
                       'loss_id: {loss_id.val:.4f} ({loss_id.avg:.4f}) '
-                      'loss_tri: {loss_tri.val:.4f} ({loss_tri.avg:.4f}) '
-                      'loss_con: {loss_con.val:.4f} ({loss_con.avg:.4f})'  .format(
+                      # 'loss_con: {loss_con.val:.4f} ({loss_con.avg:.4f})'
+                    .format(
                     epoch, batch_idx, len(trainloader),
                     current_lr,
                     train_loss=train_loss_meter,
-                    loss_id=loss_id_meter,
-                    loss_tri=loss_tri_meter,
-                    loss_con=loss_con_meter)
+                    loss_id=loss_id_meter)
+                    # loss_con=loss_con_meter
                 )
             else:
                 print('Epoch: [{}][{}/{}] '
@@ -249,10 +244,9 @@ def train(epoch):
         writer.add_scalar('id_loss', loss_id_meter.avg, epoch)
         writer.add_scalar('lr', current_lr, epoch)
 
-        writer.add_scalar('ic_loss', loss_tri_meter.avg, epoch)
         writer.add_scalar('train_acc', 100. * correct / total, epoch)
-        if args.method == 'full':
-            writer.add_scalar('contrast_loss', loss_con_meter.avg, epoch)
+        # if args.method == 'full':
+        #     writer.add_scalar('contrast_loss', loss_con_meter.avg, epoch)
 
 def evaluation(epoch):
     net.eval()
@@ -265,7 +259,7 @@ def evaluation(epoch):
             input = data['img']
             batch_num = input.size(0)
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])['recon_p']
+            feat = net(input, input, test_mode[0])['feat_p']
             gall_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
         print('Extracting Time:\t {:.3f}'.format(time.time() - start))
@@ -279,9 +273,10 @@ def evaluation(epoch):
     with torch.no_grad():
         for batch_idx, data in enumerate(query_loader):
             input = data['img']
-            batch_num = input.size(0)
+            batch_num = input.size(0) # round 59
             input = Variable(input.cuda())
-            feat = net(input, input, test_mode[0])['recon_p']
+            print('batch_index: size:', batch_idx, input.size(0))
+            feat = net(input, input, test_mode[0])['feat_p']
             query_feat[ptr:ptr + batch_num, :] = feat.detach().cpu().numpy()
             ptr = ptr + batch_num
     print('Extracting Time:\t {:.3f}'.format(time.time() - start))
